@@ -138,6 +138,16 @@ class MyHashMapTest {
         assertEquals(100, map.size());
     }
 
+    @Test
+    void shouldHandleMinIntegerHashCode() {
+        MyHashMap<Integer, String> map = new MyHashMap<>();
+
+        map.put(Integer.MIN_VALUE, "min");
+
+        assertEquals("min", map.get(Integer.MIN_VALUE));
+        assertEquals(1, map.size());
+    }
+
     private static class KeyWithSameHash {
 
         private final String value;

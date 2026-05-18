@@ -17,32 +17,7 @@ public class MyHashMap<K, V> {
 
     public V put(K key, V value) {
         resizeIfNeeded();
-
-        int index = getIndex(key);
-
-        Node<K, V> current = buckets[index];
-
-        if (current == null) {
-            buckets[index] = new Node<>(key, value);
-            size++;
-            return null;
-        }
-
-        while (true) {
-            if (Objects.equals(current.key, key)) {
-                V oldValue = current.value;
-                current.value = value;
-                return oldValue;
-            }
-
-            if (current.next == null) {
-                current.next = new Node<>(key, value);
-                size++;
-                return null;
-            }
-
-            current = current.next;
-        }
+        return putNode(key, value);
     }
 
     public V get(K key) {
@@ -97,26 +72,52 @@ public class MyHashMap<K, V> {
             return 0;
         }
 
-        return Math.abs(key.hashCode()) % buckets.length;
+        return Math.floorMod(key.hashCode(), buckets.length);
     }
 
     private void resizeIfNeeded() {
-        if ((float) size / buckets.length < LOAD_FACTOR) {
-            return;
+        if ((float) size / buckets.length >= LOAD_FACTOR) {
+            Node<K, V>[] oldBuckets = buckets;
+
+            buckets = new Node[oldBuckets.length * 2];
+            size = 0;
+
+            for (Node<K, V> bucket : oldBuckets) {
+                Node<K, V> current = bucket;
+
+                while (current != null) {
+                    putNode(current.key, current.value);
+                    current = current.next;
+                }
+            }
+        }
+    }
+
+    private V putNode(K key, V value) {
+        int index = getIndex(key);
+
+        Node<K, V> current = buckets[index];
+
+        if (current == null) {
+            buckets[index] = new Node<>(key, value);
+            size++;
+            return null;
         }
 
-        Node<K, V>[] oldBuckets = buckets;
-
-        buckets = new Node[oldBuckets.length * 2];
-        size = 0;
-
-        for (Node<K, V> bucket : oldBuckets) {
-            Node<K, V> current = bucket;
-
-            while (current != null) {
-                put(current.key, current.value);
-                current = current.next;
+        while (true) {
+            if (Objects.equals(current.key, key)) {
+                V oldValue = current.value;
+                current.value = value;
+                return oldValue;
             }
+
+            if (current.next == null) {
+                current.next = new Node<>(key, value);
+                size++;
+                return null;
+            }
+
+            current = current.next;
         }
     }
 
