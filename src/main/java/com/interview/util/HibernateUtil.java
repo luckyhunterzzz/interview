@@ -7,7 +7,7 @@ import org.hibernate.cfg.Configuration;
 @Slf4j
 public final class HibernateUtil {
 
-    private static final SessionFactory SESSION_FACTORY = buildSessionFactory();
+    private static SessionFactory sessionFactory;
 
     private HibernateUtil() {
     }
@@ -25,7 +25,15 @@ public final class HibernateUtil {
     }
 
     public static SessionFactory getSessionFactory() {
-        return SESSION_FACTORY;
+        if (sessionFactory == null || sessionFactory.isClosed()) {
+            synchronized (HibernateUtil.class) {
+                if (sessionFactory == null || sessionFactory.isClosed()) {
+                    sessionFactory = buildSessionFactory();
+                }
+            }
+        }
+
+        return sessionFactory;
     }
 
     private static void applyEnvironmentOverrides() {
@@ -37,8 +45,9 @@ public final class HibernateUtil {
     }
 
     public static void shutdown() {
-        if (SESSION_FACTORY != null && !SESSION_FACTORY.isClosed()) {
-            SESSION_FACTORY.close();
+        if (sessionFactory != null && !sessionFactory.isClosed()) {
+            sessionFactory.close();
+            sessionFactory = null;
             log.info("SessionFactory closed");
         }
     }
