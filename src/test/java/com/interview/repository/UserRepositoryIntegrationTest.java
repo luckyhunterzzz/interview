@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class UserRepositoryIT extends AbstractRepositoryIT {
+class UserRepositoryIntegrationTest extends AbstractRepositoryIT {
 
     private final UserRepository userRepository = new UserRepository();
 
@@ -39,6 +39,36 @@ class UserRepositoryIT extends AbstractRepositoryIT {
         RepositoryException exception = assertThrows(
                 RepositoryException.class,
                 () -> userRepository.save(buildUser("Petr", "ivan@example.com", 25))
+        );
+
+        assertEquals("Failed to save user", exception.getMessage());
+    }
+
+    @Test
+    void saveShouldThrowRepositoryExceptionWhenNameIsNull() {
+        RepositoryException exception = assertThrows(
+                RepositoryException.class,
+                () -> userRepository.save(buildUser(null, "ivan@example.com", 30))
+        );
+
+        assertEquals("Failed to save user", exception.getMessage());
+    }
+
+    @Test
+    void saveShouldThrowRepositoryExceptionWhenEmailIsNull() {
+        RepositoryException exception = assertThrows(
+                RepositoryException.class,
+                () -> userRepository.save(buildUser("Ivan", null, 30))
+        );
+
+        assertEquals("Failed to save user", exception.getMessage());
+    }
+
+    @Test
+    void saveShouldThrowRepositoryExceptionWhenCreatedAtIsNull() {
+        RepositoryException exception = assertThrows(
+                RepositoryException.class,
+                () -> userRepository.save(buildUserWithCreatedAt("Ivan", "ivan@example.com", 30, null))
         );
 
         assertEquals("Failed to save user", exception.getMessage());
@@ -130,11 +160,15 @@ class UserRepositoryIT extends AbstractRepositoryIT {
     }
 
     private User buildUser(String name, String email, Integer age) {
+        return buildUserWithCreatedAt(name, email, age, LocalDateTime.now());
+    }
+
+    private User buildUserWithCreatedAt(String name, String email, Integer age, LocalDateTime createdAt) {
         return User.builder()
                 .name(name)
                 .email(email)
                 .age(age)
-                .createdAt(LocalDateTime.now())
+                .createdAt(createdAt)
                 .build();
     }
 }
