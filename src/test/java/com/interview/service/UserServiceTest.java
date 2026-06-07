@@ -2,7 +2,6 @@ package com.interview.service;
 
 import com.interview.domain.entity.User;
 import com.interview.exception.DuplicateEmailException;
-import com.interview.exception.RepositoryException;
 import com.interview.exception.ValidationException;
 import com.interview.repository.UserRepository;
 import org.hibernate.exception.ConstraintViolationException;
@@ -12,6 +11,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,7 +101,7 @@ class UserServiceTest {
         ConstraintViolationException constraintViolationException = org.mockito.Mockito.mock(ConstraintViolationException.class);
         when(constraintViolationException.getSQLState()).thenReturn("23505");
         when(userRepository.save(any(User.class)))
-                .thenThrow(new RepositoryException("Failed to save user", constraintViolationException));
+                .thenThrow(new DataIntegrityViolationException("Failed to save user", constraintViolationException));
 
         DuplicateEmailException exception = assertThrows(
                 DuplicateEmailException.class,
@@ -108,16 +109,17 @@ class UserServiceTest {
         );
 
         assertEquals("User with this email already exists", exception.getMessage());
-        assertInstanceOf(RepositoryException.class, exception.getCause());
+        assertInstanceOf(DataIntegrityViolationException.class, exception.getCause());
     }
 
     @Test
-    void createUserShouldRethrowRepositoryExceptionWhenItIsNotUniqueConstraintViolation() {
-        RepositoryException repositoryException = new RepositoryException("Failed to save user", new RuntimeException("boom"));
+    void createUserShouldRethrowDataIntegrityViolationExceptionWhenItIsNotUniqueConstraintViolation() {
+        DataIntegrityViolationException repositoryException =
+                new DataIntegrityViolationException("Failed to save user", new RuntimeException("boom"));
         when(userRepository.save(any(User.class))).thenThrow(repositoryException);
 
-        RepositoryException exception = assertThrows(
-                RepositoryException.class,
+        DataIntegrityViolationException exception = assertThrows(
+                DataIntegrityViolationException.class,
                 () -> userService.createUser("Ivan", "ivan@example.com", 30)
         );
 
@@ -161,25 +163,36 @@ class UserServiceTest {
 
     @Test
     void updateUserShouldNormalizeInputAndReturnUpdatedUser() {
+        User existingUser = User.builder()
+                .id(1L)
+                .name("Ivan")
+                .email("ivan@example.com")
+                .age(30)
+                .createdAt(LocalDateTime.now())
+                .build();
         User updatedUser = User.builder()
                 .id(1L)
                 .name("Ivan Ivanov")
                 .email("ivan.ivanov@example.com")
                 .age(31)
+                .createdAt(existingUser.getCreatedAt())
                 .build();
-        when(userRepository.update(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31))
-                .thenReturn(Optional.of(updatedUser));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(existingUser)).thenReturn(updatedUser);
 
         Optional<User> result = userService.updateUser(1L, "  Ivan Ivanov  ", "  Ivan.Ivanov@Example.com  ", 31);
 
         assertTrue(result.isPresent());
         assertEquals(updatedUser, result.get());
-        verify(userRepository).update(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31);
+        assertEquals("Ivan Ivanov", existingUser.getName());
+        assertEquals("ivan.ivanov@example.com", existingUser.getEmail());
+        assertEquals(31, existingUser.getAge());
+        verify(userRepository).save(existingUser);
     }
 
     @Test
     void updateUserShouldReturnEmptyWhenUserDoesNotExist() {
-        when(userRepository.update(99L, "Ivan", "ivan@example.com", 30)).thenReturn(Optional.empty());
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
         Optional<User> result = userService.updateUser(99L, "Ivan", "ivan@example.com", 30);
 
@@ -190,8 +203,16 @@ class UserServiceTest {
     void updateUserShouldMapUniqueConstraintViolationToDuplicateEmailException() {
         ConstraintViolationException constraintViolationException = org.mockito.Mockito.mock(ConstraintViolationException.class);
         when(constraintViolationException.getSQLState()).thenReturn("23505");
-        when(userRepository.update(1L, "Ivan", "ivan@example.com", 30))
-                .thenThrow(new RepositoryException("Failed to update user", constraintViolationException));
+        User existingUser = User.builder()
+                .id(1L)
+                .name("Old")
+                .email("old@example.com")
+                .age(30)
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(existingUser))
+                .thenThrow(new DataIntegrityViolationException("Failed to update user", constraintViolationException));
 
         DuplicateEmailException exception = assertThrows(
                 DuplicateEmailException.class,
@@ -209,25 +230,28 @@ class UserServiceTest {
         );
 
         assertEquals("Id must be a positive number", exception.getMessage());
-        verify(userRepository, never()).update(any(), any(), any(), any());
+        verify(userRepository, never()).findById(any());
     }
 
     @Test
     void deleteUserShouldReturnTrueWhenRepositoryDeletesUser() {
-        when(userRepository.deleteById(1L)).thenReturn(true);
+        when(userRepository.existsById(1L)).thenReturn(true);
+        doNothing().when(userRepository).deleteById(1L);
 
         boolean result = userService.deleteUser(1L);
 
         assertTrue(result);
+        verify(userRepository).deleteById(1L);
     }
 
     @Test
     void deleteUserShouldReturnFalseWhenRepositoryDoesNotDeleteUser() {
-        when(userRepository.deleteById(42L)).thenReturn(false);
+        when(userRepository.existsById(42L)).thenReturn(false);
 
         boolean result = userService.deleteUser(42L);
 
         assertFalse(result);
+        verify(userRepository, never()).deleteById(any());
     }
 
     @Test

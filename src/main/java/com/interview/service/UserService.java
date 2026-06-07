@@ -2,11 +2,14 @@ package com.interview.service;
 
 import com.interview.domain.entity.User;
 import com.interview.exception.DuplicateEmailException;
-import com.interview.exception.RepositoryException;
 import com.interview.exception.ValidationException;
 import com.interview.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,16 +17,15 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class UserService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
 
     private final UserRepository userRepository;
 
-    public UserService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
-
+    @Transactional
     public User createUser(String name, String email, Integer age) {
         validateUserData(name, email, age);
 
@@ -38,20 +40,23 @@ public class UserService {
             User savedUser = userRepository.save(user);
             log.info("Created user with id {}", savedUser.getId());
             return savedUser;
-        } catch (RepositoryException e) {
+        } catch (DataIntegrityViolationException e) {
             throw mapRepositoryException(e, "User with this email already exists");
         }
     }
 
+    @Transactional(readOnly = true)
     public Optional<User> getUserById(Long id) {
         validateId(id);
         return userRepository.findById(id);
     }
 
+    @Transactional(readOnly = true)
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
+    @Transactional
     public Optional<User> updateUser(Long id,
                                      String name,
                                      String email,
@@ -60,26 +65,34 @@ public class UserService {
         validateUserData(name, email, age);
 
         try {
-            Optional<User> updatedUser = userRepository.update(
-                    id,
-                    name.trim(),
-                    email.trim().toLowerCase(),
-                    age
-            );
-            updatedUser.ifPresent(user -> log.info("Updated user with id {}", user.getId()));
+            Optional<User> existingUser = userRepository.findById(id);
+
+            if (existingUser.isEmpty()) {
+                return Optional.empty();
+            }
+
+            User user = existingUser.get();
+            user.setName(name.trim());
+            user.setEmail(email.trim().toLowerCase());
+            user.setAge(age);
+
+            Optional<User> updatedUser = Optional.of(userRepository.save(user));
+            updatedUser.ifPresent(savedUser -> log.info("Updated user with id {}", savedUser.getId()));
             return updatedUser;
-        } catch (RepositoryException e) {
+        } catch (DataIntegrityViolationException e) {
             throw mapRepositoryException(e, "User with this email already exists");
         }
     }
 
+    @Transactional
     public boolean deleteUser(Long id) {
         validateId(id);
-        boolean deleted = userRepository.deleteById(id);
-        if (deleted) {
+        if (userRepository.existsById(id)) {
+            userRepository.deleteById(id);
             log.info("Deleted user with id {}", id);
+            return true;
         }
-        return deleted;
+        return false;
     }
 
     private void validateUserData(String name, String email, Integer age) {
@@ -106,7 +119,7 @@ public class UserService {
         }
     }
 
-    private RuntimeException mapRepositoryException(RepositoryException e, String duplicateEmailMessage) {
+    private RuntimeException mapRepositoryException(DataIntegrityViolationException e, String duplicateEmailMessage) {
         if (isUniqueViolation(e)) {
             return new DuplicateEmailException(duplicateEmailMessage, e);
         }
