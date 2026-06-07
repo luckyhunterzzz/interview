@@ -16,6 +16,12 @@ public final class EnvUtil {
     }
 
     public static String getOptional(String key, String defaultValue) {
+        String systemPropertyValue = System.getProperty(key);
+
+        if (systemPropertyValue != null && !systemPropertyValue.isBlank()) {
+            return systemPropertyValue;
+        }
+
         String value = System.getenv(key);
 
         if (value != null && !value.isBlank()) {
