@@ -1,7 +1,10 @@
 package com.interview.controller;
 
-import com.interview.domain.entity.User;
+import com.interview.dto.CreateUserRequest;
+import com.interview.dto.UpdateUserRequest;
+import com.interview.dto.UserResponse;
 import com.interview.exception.DuplicateEmailException;
+import com.interview.exception.ValidationException;
 import com.interview.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,8 +37,8 @@ class UserControllerTest {
 
     @Test
     void createUserShouldReturnCreatedDto() throws Exception {
-        User user = buildUser(1L, "Ivan", "ivan@example.com", 30);
-        when(userService.createUser("Ivan", "ivan@example.com", 30)).thenReturn(user);
+        UserResponse user = buildUserResponse(1L, "Ivan", "ivan@example.com", 30);
+        when(userService.createUser(new CreateUserRequest("Ivan", "ivan@example.com", 30))).thenReturn(user);
 
         mockMvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -56,7 +59,7 @@ class UserControllerTest {
 
     @Test
     void getUserByIdShouldReturnUserDto() throws Exception {
-        when(userService.getUserById(1L)).thenReturn(Optional.of(buildUser(1L, "Ivan", "ivan@example.com", 30)));
+        when(userService.getUserById(1L)).thenReturn(Optional.of(buildUserResponse(1L, "Ivan", "ivan@example.com", 30)));
 
         mockMvc.perform(get("/api/users/1"))
                 .andExpect(status().isOk())
@@ -76,8 +79,8 @@ class UserControllerTest {
     @Test
     void getAllUsersShouldReturnDtoList() throws Exception {
         when(userService.getAllUsers()).thenReturn(List.of(
-                buildUser(1L, "Ivan", "ivan@example.com", 30),
-                buildUser(2L, "Petr", "petr@example.com", 25)
+                buildUserResponse(1L, "Ivan", "ivan@example.com", 30),
+                buildUserResponse(2L, "Petr", "petr@example.com", 25)
         ));
 
         mockMvc.perform(get("/api/users"))
@@ -88,8 +91,8 @@ class UserControllerTest {
 
     @Test
     void updateUserShouldReturnUpdatedDto() throws Exception {
-        when(userService.updateUser(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31))
-                .thenReturn(Optional.of(buildUser(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31)));
+        when(userService.updateUser(1L, new UpdateUserRequest("Ivan Ivanov", "ivan.ivanov@example.com", 31)))
+                .thenReturn(Optional.of(buildUserResponse(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31)));
 
         mockMvc.perform(put("/api/users/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -108,7 +111,8 @@ class UserControllerTest {
 
     @Test
     void updateUserShouldReturnNotFound() throws Exception {
-        when(userService.updateUser(99L, "Ivan", "ivan@example.com", 30)).thenReturn(Optional.empty());
+        when(userService.updateUser(99L, new UpdateUserRequest("Ivan", "ivan@example.com", 30)))
+                .thenReturn(Optional.empty());
 
         mockMvc.perform(put("/api/users/99")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -142,7 +146,7 @@ class UserControllerTest {
 
     @Test
     void createUserShouldReturnConflictForDuplicateEmail() throws Exception {
-        when(userService.createUser("Ivan", "ivan@example.com", 30))
+        when(userService.createUser(new CreateUserRequest("Ivan", "ivan@example.com", 30)))
                 .thenThrow(new DuplicateEmailException("User with this email already exists", null));
 
         mockMvc.perform(post("/api/users")
@@ -175,18 +179,14 @@ class UserControllerTest {
 
     @Test
     void getUserByIdShouldReturnBadRequestForInvalidId() throws Exception {
+        when(userService.getUserById(0L)).thenThrow(new ValidationException("Id must be a positive number"));
+
         mockMvc.perform(get("/api/users/0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.messages[0]").value("Id must be a positive number"));
     }
 
-    private User buildUser(Long id, String name, String email, Integer age) {
-        return User.builder()
-                .id(id)
-                .name(name)
-                .email(email)
-                .age(age)
-                .createdAt(LocalDateTime.of(2024, 1, 10, 12, 0))
-                .build();
+    private UserResponse buildUserResponse(Long id, String name, String email, Integer age) {
+        return new UserResponse(id, name, email, age, LocalDateTime.of(2024, 1, 10, 12, 0));
     }
 }
