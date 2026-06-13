@@ -1,17 +1,19 @@
 package com.interview.service;
 
 import com.interview.domain.entity.User;
+import com.interview.dto.CreateUserRequest;
+import com.interview.dto.UpdateUserRequest;
+import com.interview.dto.UserResponse;
 import com.interview.exception.DuplicateEmailException;
-import com.interview.exception.RepositoryException;
 import com.interview.exception.ValidationException;
 import com.interview.repository.UserRepository;
-import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,13 +52,16 @@ class UserServiceTest {
                 .build();
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
 
-        User result = userService.createUser("  Ivan  ", "  Ivan@Example.com  ", 30);
+        UserResponse result = userService.createUser(new CreateUserRequest("  Ivan  ", "  Ivan@Example.com  ", 30));
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         User capturedUser = userCaptor.getValue();
 
-        assertEquals(savedUser, result);
+        assertEquals(savedUser.getId(), result.id());
+        assertEquals(savedUser.getName(), result.name());
+        assertEquals(savedUser.getEmail(), result.email());
+        assertEquals(savedUser.getAge(), result.age());
         assertEquals("Ivan", capturedUser.getName());
         assertEquals("ivan@example.com", capturedUser.getEmail());
         assertEquals(30, capturedUser.getAge());
@@ -66,7 +72,7 @@ class UserServiceTest {
     void createUserShouldThrowValidationExceptionForInvalidName() {
         ValidationException exception = assertThrows(
                 ValidationException.class,
-                () -> userService.createUser("   ", "ivan@example.com", 30)
+                () -> userService.createUser(new CreateUserRequest("   ", "ivan@example.com", 30))
         );
 
         assertEquals("Name must not be empty", exception.getMessage());
@@ -77,7 +83,7 @@ class UserServiceTest {
     void createUserShouldThrowValidationExceptionForInvalidEmail() {
         ValidationException exception = assertThrows(
                 ValidationException.class,
-                () -> userService.createUser("Ivan", "invalid-email", 30)
+                () -> userService.createUser(new CreateUserRequest("Ivan", "invalid-email", 30))
         );
 
         assertEquals("Email has invalid format", exception.getMessage());
@@ -88,7 +94,7 @@ class UserServiceTest {
     void createUserShouldThrowValidationExceptionForInvalidAge() {
         ValidationException exception = assertThrows(
                 ValidationException.class,
-                () -> userService.createUser("Ivan", "ivan@example.com", 151)
+                () -> userService.createUser(new CreateUserRequest("Ivan", "ivan@example.com", 151))
         );
 
         assertEquals("Age must be between 0 and 150", exception.getMessage());
@@ -97,31 +103,30 @@ class UserServiceTest {
 
     @Test
     void createUserShouldMapUniqueConstraintViolationToDuplicateEmailException() {
-        ConstraintViolationException constraintViolationException = org.mockito.Mockito.mock(ConstraintViolationException.class);
-        when(constraintViolationException.getSQLState()).thenReturn("23505");
         when(userRepository.save(any(User.class)))
-                .thenThrow(new RepositoryException("Failed to save user", constraintViolationException));
+                .thenThrow(new DataIntegrityViolationException("Failed to save user"));
 
         DuplicateEmailException exception = assertThrows(
                 DuplicateEmailException.class,
-                () -> userService.createUser("Ivan", "ivan@example.com", 30)
+                () -> userService.createUser(new CreateUserRequest("Ivan", "ivan@example.com", 30))
         );
 
         assertEquals("User with this email already exists", exception.getMessage());
-        assertInstanceOf(RepositoryException.class, exception.getCause());
+        assertInstanceOf(DataIntegrityViolationException.class, exception.getCause());
     }
 
     @Test
-    void createUserShouldRethrowRepositoryExceptionWhenItIsNotUniqueConstraintViolation() {
-        RepositoryException repositoryException = new RepositoryException("Failed to save user", new RuntimeException("boom"));
+    void createUserShouldWrapDataIntegrityViolationExceptionIntoDuplicateEmailException() {
+        DataIntegrityViolationException repositoryException = new DataIntegrityViolationException("Failed to save user");
         when(userRepository.save(any(User.class))).thenThrow(repositoryException);
 
-        RepositoryException exception = assertThrows(
-                RepositoryException.class,
-                () -> userService.createUser("Ivan", "ivan@example.com", 30)
+        DuplicateEmailException exception = assertThrows(
+                DuplicateEmailException.class,
+                () -> userService.createUser(new CreateUserRequest("Ivan", "ivan@example.com", 30))
         );
 
-        assertSame(repositoryException, exception);
+        assertEquals("User with this email already exists", exception.getMessage());
+        assertSame(repositoryException, exception.getCause());
     }
 
     @Test
@@ -129,10 +134,11 @@ class UserServiceTest {
         User user = User.builder().id(1L).name("Ivan").email("ivan@example.com").age(30).build();
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        Optional<User> result = userService.getUserById(1L);
+        Optional<UserResponse> result = userService.getUserById(1L);
 
         assertTrue(result.isPresent());
-        assertEquals(user, result.get());
+        assertEquals(user.getId(), result.get().id());
+        assertEquals(user.getName(), result.get().name());
     }
 
     @Test
@@ -154,48 +160,72 @@ class UserServiceTest {
         );
         when(userRepository.findAll()).thenReturn(users);
 
-        List<User> result = userService.getAllUsers();
+        List<UserResponse> result = userService.getAllUsers();
 
-        assertEquals(users, result);
+        assertEquals(2, result.size());
+        assertEquals("Ivan", result.get(0).name());
+        assertEquals("Petr", result.get(1).name());
     }
 
     @Test
     void updateUserShouldNormalizeInputAndReturnUpdatedUser() {
+        User existingUser = User.builder()
+                .id(1L)
+                .name("Ivan")
+                .email("ivan@example.com")
+                .age(30)
+                .createdAt(LocalDateTime.now())
+                .build();
         User updatedUser = User.builder()
                 .id(1L)
                 .name("Ivan Ivanov")
                 .email("ivan.ivanov@example.com")
                 .age(31)
+                .createdAt(existingUser.getCreatedAt())
                 .build();
-        when(userRepository.update(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31))
-                .thenReturn(Optional.of(updatedUser));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(existingUser)).thenReturn(updatedUser);
 
-        Optional<User> result = userService.updateUser(1L, "  Ivan Ivanov  ", "  Ivan.Ivanov@Example.com  ", 31);
+        Optional<UserResponse> result = userService.updateUser(
+                1L,
+                new UpdateUserRequest("  Ivan Ivanov  ", "  Ivan.Ivanov@Example.com  ", 31)
+        );
 
         assertTrue(result.isPresent());
-        assertEquals(updatedUser, result.get());
-        verify(userRepository).update(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31);
+        assertEquals(updatedUser.getId(), result.get().id());
+        assertEquals(updatedUser.getName(), result.get().name());
+        assertEquals(updatedUser.getEmail(), result.get().email());
+        assertEquals("Ivan Ivanov", existingUser.getName());
+        assertEquals("ivan.ivanov@example.com", existingUser.getEmail());
+        assertEquals(31, existingUser.getAge());
+        verify(userRepository).save(existingUser);
     }
 
     @Test
     void updateUserShouldReturnEmptyWhenUserDoesNotExist() {
-        when(userRepository.update(99L, "Ivan", "ivan@example.com", 30)).thenReturn(Optional.empty());
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
-        Optional<User> result = userService.updateUser(99L, "Ivan", "ivan@example.com", 30);
+        Optional<UserResponse> result = userService.updateUser(99L, new UpdateUserRequest("Ivan", "ivan@example.com", 30));
 
         assertTrue(result.isEmpty());
     }
 
     @Test
     void updateUserShouldMapUniqueConstraintViolationToDuplicateEmailException() {
-        ConstraintViolationException constraintViolationException = org.mockito.Mockito.mock(ConstraintViolationException.class);
-        when(constraintViolationException.getSQLState()).thenReturn("23505");
-        when(userRepository.update(1L, "Ivan", "ivan@example.com", 30))
-                .thenThrow(new RepositoryException("Failed to update user", constraintViolationException));
+        User existingUser = User.builder()
+                .id(1L)
+                .name("Old")
+                .email("old@example.com")
+                .age(30)
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(existingUser))
+                .thenThrow(new DataIntegrityViolationException("Failed to update user"));
 
         DuplicateEmailException exception = assertThrows(
                 DuplicateEmailException.class,
-                () -> userService.updateUser(1L, "Ivan", "ivan@example.com", 30)
+                () -> userService.updateUser(1L, new UpdateUserRequest("Ivan", "ivan@example.com", 30))
         );
 
         assertEquals("User with this email already exists", exception.getMessage());
@@ -205,29 +235,32 @@ class UserServiceTest {
     void updateUserShouldValidateId() {
         ValidationException exception = assertThrows(
                 ValidationException.class,
-                () -> userService.updateUser(-1L, "Ivan", "ivan@example.com", 30)
+                () -> userService.updateUser(-1L, new UpdateUserRequest("Ivan", "ivan@example.com", 30))
         );
 
         assertEquals("Id must be a positive number", exception.getMessage());
-        verify(userRepository, never()).update(any(), any(), any(), any());
+        verify(userRepository, never()).findById(any());
     }
 
     @Test
     void deleteUserShouldReturnTrueWhenRepositoryDeletesUser() {
-        when(userRepository.deleteById(1L)).thenReturn(true);
+        when(userRepository.existsById(1L)).thenReturn(true);
+        doNothing().when(userRepository).deleteById(1L);
 
         boolean result = userService.deleteUser(1L);
 
         assertTrue(result);
+        verify(userRepository).deleteById(1L);
     }
 
     @Test
     void deleteUserShouldReturnFalseWhenRepositoryDoesNotDeleteUser() {
-        when(userRepository.deleteById(42L)).thenReturn(false);
+        when(userRepository.existsById(42L)).thenReturn(false);
 
         boolean result = userService.deleteUser(42L);
 
         assertFalse(result);
+        verify(userRepository, never()).deleteById(any());
     }
 
     @Test
