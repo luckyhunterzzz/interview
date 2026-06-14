@@ -4,7 +4,6 @@ import com.interview.domain.entity.User;
 import com.interview.dto.CreateUserRequest;
 import com.interview.dto.UpdateUserRequest;
 import com.interview.dto.UserResponse;
-import com.interview.event.UserEventProducer;
 import com.interview.exception.DuplicateEmailException;
 import com.interview.exception.UserNotFoundException;
 import com.interview.mapper.UserMapper;
@@ -26,7 +25,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserValidator userValidator;
-    private final UserEventProducer userEventProducer;
+    private final OutboxEventService outboxEventService;
 
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
@@ -41,7 +40,7 @@ public class UserService {
 
         try {
             User savedUser = userRepository.save(user);
-            userEventProducer.publishCreated(savedUser.getEmail());
+            outboxEventService.saveCreatedUserEvent(savedUser.getEmail());
             log.info("Created user with id {}", savedUser.getId());
             return UserMapper.toResponse(savedUser);
         } catch (DataIntegrityViolationException exception) {
@@ -89,7 +88,7 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException(id));
 
         userRepository.deleteById(id);
-        userEventProducer.publishDeleted(user.getEmail());
+        outboxEventService.saveDeletedUserEvent(user.getEmail());
         log.info("Deleted user with id {}", id);
     }
 }

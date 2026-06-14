@@ -4,7 +4,6 @@ import com.interview.domain.entity.User;
 import com.interview.dto.CreateUserRequest;
 import com.interview.dto.UpdateUserRequest;
 import com.interview.dto.UserResponse;
-import com.interview.event.UserEventProducer;
 import com.interview.exception.DuplicateEmailException;
 import com.interview.exception.UserNotFoundException;
 import com.interview.exception.ValidationException;
@@ -23,11 +22,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -45,7 +42,7 @@ class UserServiceTest {
     private UserValidator userValidator;
 
     @Mock
-    private UserEventProducer userEventProducer;
+    private OutboxEventService outboxEventService;
 
     @InjectMocks
     private UserService userService;
@@ -75,7 +72,7 @@ class UserServiceTest {
         assertEquals("ivan@example.com", capturedUser.getEmail());
         assertEquals(30, capturedUser.getAge());
         assertNotNull(capturedUser.getCreatedAt());
-        verify(userEventProducer).publishCreated("ivan@example.com");
+        verify(outboxEventService).saveCreatedUserEvent("ivan@example.com");
     }
 
     @Test
@@ -111,7 +108,7 @@ class UserServiceTest {
 
         assertEquals("User with this email already exists", exception.getMessage());
         assertInstanceOf(DataIntegrityViolationException.class, exception.getCause());
-        verify(userEventProducer, never()).publishCreated(any());
+        verify(outboxEventService, never()).saveCreatedUserEvent(any());
     }
 
     @Test
@@ -244,7 +241,7 @@ class UserServiceTest {
 
         userService.deleteUser(1L);
         verify(userRepository).deleteById(1L);
-        verify(userEventProducer).publishDeleted("ivan@example.com");
+        verify(outboxEventService).saveDeletedUserEvent("ivan@example.com");
     }
 
     @Test
@@ -255,7 +252,7 @@ class UserServiceTest {
 
         assertEquals("User with id 42 not found", exception.getMessage());
         verify(userRepository, never()).deleteById(any());
-        verify(userEventProducer, never()).publishDeleted(any());
+        verify(outboxEventService, never()).saveDeletedUserEvent(any());
     }
 
     @Test
@@ -263,7 +260,7 @@ class UserServiceTest {
         doThrowValidationOnId();
         assertThrows(ValidationException.class, () -> userService.deleteUser(null));
         verify(userRepository, never()).deleteById(any());
-        verify(userEventProducer, never()).publishDeleted(any());
+        verify(outboxEventService, never()).saveDeletedUserEvent(any());
     }
 
     private void doThrowValidationOnCreate() {
