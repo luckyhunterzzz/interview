@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,5 +63,34 @@ class KafkaNotificationIntegrationTest extends AbstractNotificationIntegrationTe
                 "Здравствуйте! Ваш аккаунт был удалён.",
                 messages[0].getContent().toString().trim()
         );
+    }
+
+    @Test
+    void kafkaConsumerShouldSkipDuplicateEvent() {
+        Map<String, Object> producerProps = KafkaTestUtils.producerProps(embeddedKafkaBroker);
+        producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+
+        DefaultKafkaProducerFactory<String, UserNotificationEvent> producerFactory =
+                new DefaultKafkaProducerFactory<>(producerProps);
+
+        UUID eventId = UUID.randomUUID();
+        UserNotificationEvent event = new UserNotificationEvent(
+                eventId,
+                UserOperation.CREATED,
+                "ivan@example.com",
+                Instant.now()
+        );
+
+        try {
+            KafkaTemplate<String, UserNotificationEvent> kafkaTemplate = new KafkaTemplate<>(producerFactory);
+            kafkaTemplate.send("user-events", "ivan@example.com", event);
+            kafkaTemplate.send("user-events", "ivan@example.com", event);
+            kafkaTemplate.flush();
+        } finally {
+            producerFactory.destroy();
+        }
+
+        await().untilAsserted(() -> assertEquals(1, GREEN_MAIL.getReceivedMessages().length));
     }
 }
