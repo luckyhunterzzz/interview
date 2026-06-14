@@ -1,0 +1,20 @@
+spring:
+  profiles:
+    active: test
+  kafka:
+    listener:
+      auto-startup: false
+    consumer:
+      group-id: notification-service-test
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.interview.common.event
+        spring.json.value.default.type: com.interview.common.event.UserNotificationEvent
+
+app:
+  kafka:
+    user-events-topic: user-events
+  mail:
+    from: test@your-site.local
