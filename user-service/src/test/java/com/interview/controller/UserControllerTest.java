@@ -4,6 +4,7 @@ import com.interview.dto.CreateUserRequest;
 import com.interview.dto.UpdateUserRequest;
 import com.interview.dto.UserResponse;
 import com.interview.exception.DuplicateEmailException;
+import com.interview.exception.UserNotFoundException;
 import com.interview.exception.ValidationException;
 import com.interview.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -16,8 +17,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -61,7 +62,7 @@ class UserControllerTest {
 
     @Test
     void getUserByIdShouldReturnUserDto() throws Exception {
-        when(userService.getUserById(1L)).thenReturn(Optional.of(buildUserResponse(1L, "Ivan", "ivan@example.com", 30)));
+        when(userService.getUserById(1L)).thenReturn(buildUserResponse(1L, "Ivan", "ivan@example.com", 30));
 
         mockMvc.perform(get("/api/users/1"))
                 .andExpect(status().isOk())
@@ -72,10 +73,11 @@ class UserControllerTest {
 
     @Test
     void getUserByIdShouldReturnNotFound() throws Exception {
-        when(userService.getUserById(99L)).thenReturn(Optional.empty());
+        when(userService.getUserById(99L)).thenThrow(new UserNotFoundException(99L));
 
         mockMvc.perform(get("/api/users/99"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.messages[0]").value("User with id 99 not found"));
     }
 
     @Test
@@ -94,7 +96,7 @@ class UserControllerTest {
     @Test
     void updateUserShouldReturnUpdatedDto() throws Exception {
         when(userService.updateUser(1L, new UpdateUserRequest("Ivan Ivanov", "ivan.ivanov@example.com", 31)))
-                .thenReturn(Optional.of(buildUserResponse(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31)));
+                .thenReturn(buildUserResponse(1L, "Ivan Ivanov", "ivan.ivanov@example.com", 31));
 
         mockMvc.perform(put("/api/users/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -114,7 +116,7 @@ class UserControllerTest {
     @Test
     void updateUserShouldReturnNotFound() throws Exception {
         when(userService.updateUser(99L, new UpdateUserRequest("Ivan", "ivan@example.com", 30)))
-                .thenReturn(Optional.empty());
+                .thenThrow(new UserNotFoundException(99L));
 
         mockMvc.perform(put("/api/users/99")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -125,13 +127,12 @@ class UserControllerTest {
                                   "age": 30
                                 }
                                 """))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.messages[0]").value("User with id 99 not found"));
     }
 
     @Test
     void deleteUserShouldReturnNoContent() throws Exception {
-        when(userService.deleteUser(1L)).thenReturn(true);
-
         mockMvc.perform(delete("/api/users/1"))
                 .andExpect(status().isNoContent());
 
@@ -140,10 +141,11 @@ class UserControllerTest {
 
     @Test
     void deleteUserShouldReturnNotFound() throws Exception {
-        when(userService.deleteUser(99L)).thenReturn(false);
+        doThrow(new UserNotFoundException(99L)).when(userService).deleteUser(99L);
 
         mockMvc.perform(delete("/api/users/99"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.messages[0]").value("User with id 99 not found"));
     }
 
     @Test

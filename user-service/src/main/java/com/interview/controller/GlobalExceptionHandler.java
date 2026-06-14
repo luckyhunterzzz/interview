@@ -2,6 +2,7 @@ package com.interview.controller;
 
 import com.interview.dto.ErrorResponse;
 import com.interview.exception.DuplicateEmailException;
+import com.interview.exception.UserNotFoundException;
 import com.interview.exception.ValidationException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateEmailException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateEmailException(DuplicateEmailException exception) {
         return buildErrorResponse(HttpStatus.CONFLICT, List.of(exception.getMessage()));
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFoundException(UserNotFoundException exception) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, List.of(exception.getMessage()));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

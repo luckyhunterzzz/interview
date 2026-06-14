@@ -6,6 +6,7 @@ import com.interview.dto.UpdateUserRequest;
 import com.interview.dto.UserResponse;
 import com.interview.event.UserEventProducer;
 import com.interview.exception.DuplicateEmailException;
+import com.interview.exception.UserNotFoundException;
 import com.interview.exception.ValidationException;
 import com.interview.repository.UserRepository;
 import com.interview.validator.UserValidator;
@@ -118,11 +119,19 @@ class UserServiceTest {
         User user = User.builder().id(1L).name("Ivan").email("ivan@example.com").age(30).build();
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        Optional<UserResponse> result = userService.getUserById(1L);
+        UserResponse result = userService.getUserById(1L);
 
-        assertTrue(result.isPresent());
-        assertEquals(user.getId(), result.get().id());
-        assertEquals(user.getName(), result.get().name());
+        assertEquals(user.getId(), result.id());
+        assertEquals(user.getName(), result.name());
+    }
+
+    @Test
+    void getUserByIdShouldThrowUserNotFoundExceptionWhenUserDoesNotExist() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        UserNotFoundException exception = assertThrows(UserNotFoundException.class, () -> userService.getUserById(99L));
+
+        assertEquals("User with id 99 not found", exception.getMessage());
     }
 
     @Test
@@ -166,15 +175,14 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(existingUser));
         when(userRepository.save(existingUser)).thenReturn(updatedUser);
 
-        Optional<UserResponse> result = userService.updateUser(
+        UserResponse result = userService.updateUser(
                 1L,
                 new UpdateUserRequest("  Ivan Ivanov  ", "  Ivan.Ivanov@Example.com  ", 31)
         );
 
-        assertTrue(result.isPresent());
-        assertEquals(updatedUser.getId(), result.get().id());
-        assertEquals(updatedUser.getName(), result.get().name());
-        assertEquals(updatedUser.getEmail(), result.get().email());
+        assertEquals(updatedUser.getId(), result.id());
+        assertEquals(updatedUser.getName(), result.name());
+        assertEquals(updatedUser.getEmail(), result.email());
         assertEquals("Ivan Ivanov", existingUser.getName());
         assertEquals("ivan.ivanov@example.com", existingUser.getEmail());
         assertEquals(31, existingUser.getAge());
@@ -182,12 +190,15 @@ class UserServiceTest {
     }
 
     @Test
-    void updateUserShouldReturnEmptyWhenUserDoesNotExist() {
+    void updateUserShouldThrowUserNotFoundExceptionWhenUserDoesNotExist() {
         when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
-        Optional<UserResponse> result = userService.updateUser(99L, new UpdateUserRequest("Ivan", "ivan@example.com", 30));
+        UserNotFoundException exception = assertThrows(
+                UserNotFoundException.class,
+                () -> userService.updateUser(99L, new UpdateUserRequest("Ivan", "ivan@example.com", 30))
+        );
 
-        assertTrue(result.isEmpty());
+        assertEquals("User with id 99 not found", exception.getMessage());
     }
 
     @Test
@@ -231,20 +242,18 @@ class UserServiceTest {
         ));
         doNothing().when(userRepository).deleteById(1L);
 
-        boolean result = userService.deleteUser(1L);
-
-        assertTrue(result);
+        userService.deleteUser(1L);
         verify(userRepository).deleteById(1L);
         verify(userEventProducer).publishDeleted("ivan@example.com");
     }
 
     @Test
-    void deleteUserShouldReturnFalseWhenRepositoryDoesNotDeleteUser() {
+    void deleteUserShouldThrowUserNotFoundExceptionWhenRepositoryDoesNotDeleteUser() {
         when(userRepository.findById(42L)).thenReturn(Optional.empty());
 
-        boolean result = userService.deleteUser(42L);
+        UserNotFoundException exception = assertThrows(UserNotFoundException.class, () -> userService.deleteUser(42L));
 
-        assertFalse(result);
+        assertEquals("User with id 42 not found", exception.getMessage());
         verify(userRepository, never()).deleteById(any());
         verify(userEventProducer, never()).publishDeleted(any());
     }

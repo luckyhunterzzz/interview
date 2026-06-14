@@ -6,6 +6,7 @@ import com.interview.dto.UpdateUserRequest;
 import com.interview.dto.UserResponse;
 import com.interview.event.UserEventProducer;
 import com.interview.exception.DuplicateEmailException;
+import com.interview.exception.UserNotFoundException;
 import com.interview.mapper.UserMapper;
 import com.interview.repository.UserRepository;
 import com.interview.validator.UserValidator;
@@ -17,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -50,9 +50,11 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<UserResponse> getUserById(Long id) {
+    public UserResponse getUserById(Long id) {
         userValidator.validateId(id);
-        return userRepository.findById(id).map(UserMapper::toResponse);
+        return userRepository.findById(id)
+                .map(UserMapper::toResponse)
+                .orElseThrow(() -> new UserNotFoundException(id));
     }
 
     @Transactional(readOnly = true)
@@ -61,16 +63,12 @@ public class UserService {
     }
 
     @Transactional
-    public Optional<UserResponse> updateUser(Long id, UpdateUserRequest request) {
+    public UserResponse updateUser(Long id, UpdateUserRequest request) {
         userValidator.validateId(id);
         userValidator.validateUserData(request.name(), request.email(), request.age());
 
-        Optional<User> existingUser = userRepository.findById(id);
-        if (existingUser.isEmpty()) {
-            return Optional.empty();
-        }
-
-        User user = existingUser.get();
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
         user.setName(request.name().trim());
         user.setEmail(request.email().trim().toLowerCase());
         user.setAge(request.age());
@@ -78,24 +76,20 @@ public class UserService {
         try {
             User updatedUser = userRepository.save(user);
             log.info("Updated user with id {}", updatedUser.getId());
-            return Optional.of(UserMapper.toResponse(updatedUser));
+            return UserMapper.toResponse(updatedUser);
         } catch (DataIntegrityViolationException exception) {
             throw new DuplicateEmailException("User with this email already exists", exception);
         }
     }
 
     @Transactional
-    public boolean deleteUser(Long id) {
+    public void deleteUser(Long id) {
         userValidator.validateId(id);
-        Optional<User> user = userRepository.findById(id);
-
-        if (user.isEmpty()) {
-            return false;
-        }
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
 
         userRepository.deleteById(id);
-        userEventProducer.publishDeleted(user.get().getEmail());
+        userEventProducer.publishDeleted(user.getEmail());
         log.info("Deleted user with id {}", id);
-        return true;
     }
 }
