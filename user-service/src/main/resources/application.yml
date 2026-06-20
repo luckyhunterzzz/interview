@@ -28,3 +28,5 @@ spring:
 app:
   kafka:
     user-events-topic: ${USER_EVENTS_TOPIC:user-events}
+  outbox:
+    publish-cron: ${OUTBOX_PUBLISH_CRON:*/5 * * * * *}

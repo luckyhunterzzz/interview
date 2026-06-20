@@ -27,7 +27,7 @@ public class OutboxEventPublisher {
     private final KafkaTemplate<String, UserNotificationEvent> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
-    @Scheduled(fixedDelayString = "${app.outbox.publish-delay-ms:5000}")
+    @Scheduled(cron = "${app.outbox.publish-cron}")
     @Transactional
     public void publishPendingEvents() {
         List<OutboxEvent> events = outboxEventRepository.findByStatusInOrderByCreatedAtAsc(

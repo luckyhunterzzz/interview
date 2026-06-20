@@ -15,6 +15,12 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class EmailNotificationService {
 
+    private static final String ACCOUNT_CREATED_SUBJECT = "Account created";
+    private static final String ACCOUNT_DELETED_SUBJECT = "Account deleted";
+    private static final String ACCOUNT_CREATED_BODY = "Здравствуйте! Ваш аккаунт на сайте ваш сайт был успешно создан.";
+    private static final String ACCOUNT_DELETED_BODY = "Здравствуйте! Ваш аккаунт был удалён.";
+    private static final String FAILED_TO_SEND_EMAIL_MESSAGE = "Failed to send email";
+
     private final JavaMailSender javaMailSender;
 
     @Value("${app.mail.from}")
@@ -38,23 +44,21 @@ public class EmailNotificationService {
         try {
             javaMailSender.send(message);
         } catch (MailException exception) {
-            throw new NotificationDeliveryException("Failed to send email", exception);
+            throw new NotificationDeliveryException(FAILED_TO_SEND_EMAIL_MESSAGE, exception);
         }
     }
 
     private String resolveSubject(UserOperation operation) {
         return switch (operation) {
-            case CREATED -> "Account created";
-            case DELETED -> "Account deleted";
+            case CREATED -> ACCOUNT_CREATED_SUBJECT;
+            case DELETED -> ACCOUNT_DELETED_SUBJECT;
         };
     }
 
     private String resolveBody(UserOperation operation) {
         return switch (operation) {
-            case CREATED ->
-                    "Здравствуйте! Ваш аккаунт на сайте ваш сайт был успешно создан.";
-            case DELETED ->
-                    "Здравствуйте! Ваш аккаунт был удалён.";
+            case CREATED -> ACCOUNT_CREATED_BODY;
+            case DELETED -> ACCOUNT_DELETED_BODY;
         };
     }
 }
