@@ -11,7 +11,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,5 +49,20 @@ class NotificationApiIntegrationTest extends AbstractNotificationIntegrationTest
                 "Здравствуйте! Ваш аккаунт на сайте ваш сайт был успешно создан.",
                 messages[0].getContent().toString().trim()
         );
+    }
+
+    @Test
+    void apiDocsShouldDescribeNotificationApi() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/notifications/send']").exists())
+                .andExpect(jsonPath("$.info.title").value("Notification Service API"));
+    }
+
+    @Test
+    void swaggerUiShouldBeAvailable() throws Exception {
+        mockMvc.perform(get("/swagger-ui/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Swagger UI")));
     }
 }
