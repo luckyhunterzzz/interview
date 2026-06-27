@@ -1,4 +1,11 @@
 spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+    discovery:
+      enabled: false
   profiles:
     active: test
   kafka:
@@ -12,6 +19,10 @@ spring:
       properties:
         spring.json.trusted.packages: com.interview.common.event
         spring.json.value.default.type: com.interview.common.event.UserNotificationEvent
+
+eureka:
+  client:
+    enabled: false
 
 app:
   kafka:

@@ -1,4 +1,4 @@
-services:
+﻿services:
   postgres:
     image: postgres:16
     container_name: user-service-postgres
@@ -38,6 +38,48 @@ services:
       - "${MAILHOG_SMTP_PORT}:1025"
       - "${MAILHOG_UI_PORT}:8025"
 
+  config-server:
+    build:
+      context: .
+      dockerfile: config-server/Dockerfile
+    container_name: config-server
+    environment:
+      SERVER_PORT: 8888
+      CONFIG_REPO_LOCATION: file:/config-repo
+    volumes:
+      - ./config-repo:/config-repo
+    ports:
+      - "8888:8888"
+
+  discovery-server:
+    build:
+      context: .
+      dockerfile: discovery-server/Dockerfile
+    container_name: discovery-server
+    depends_on:
+      - config-server
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_DEFAULT_ZONE: http://discovery-server:8761/eureka
+      SERVER_PORT: 8761
+    ports:
+      - "8761:8761"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    depends_on:
+      - config-server
+      - discovery-server
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_DEFAULT_ZONE: http://discovery-server:8761/eureka
+      SERVER_PORT: 8085
+    ports:
+      - "8085:8085"
+
   user-service:
     build:
       context: .
@@ -46,7 +88,11 @@ services:
     depends_on:
       - postgres
       - kafka
+      - config-server
+      - discovery-server
     environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_DEFAULT_ZONE: http://discovery-server:8761/eureka
       DB_HOST: postgres
       DB_PORT: 5432
       USER_SERVICE_DB: ${USER_SERVICE_DB}
@@ -67,7 +113,11 @@ services:
       - kafka
       - mailhog
       - postgres
+      - config-server
+      - discovery-server
     environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_DEFAULT_ZONE: http://discovery-server:8761/eureka
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       USER_EVENTS_TOPIC: ${USER_EVENTS_TOPIC}
       MAIL_HOST: mailhog
