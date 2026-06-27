@@ -1,32 +1,5 @@
-server:
-  port: ${SERVER_PORT:8080}
-
-spring:
+﻿spring:
   application:
     name: user-service
-  datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${USER_SERVICE_DB:user_service_db}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:postgres}
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    properties:
-      spring.json.add.type.headers: false
-  jpa:
-    open-in-view: false
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-  flyway:
-    enabled: true
-    table: user_service_flyway_history
-
-app:
-  kafka:
-    user-events-topic: ${USER_EVENTS_TOPIC:user-events}
-  outbox:
-    publish-cron: ${OUTBOX_PUBLISH_CRON:*/5 * * * * *}
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
